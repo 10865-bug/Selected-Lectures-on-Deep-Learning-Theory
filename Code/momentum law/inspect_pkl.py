@@ -2,8 +2,8 @@ import pickle
 import numpy as np
 from pprint import pprint
 
+# 查看PKL文件结构
 def inspect_pkl(path):
-    """查看PKL文件结构"""
     with open(path, 'rb') as f:
         data = pickle.load(f)
     
