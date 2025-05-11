@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 from itertools import product
-import os  # 新增导入
+import os
 
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
 plt.rcParams['axes.unicode_minus'] = False
@@ -144,8 +144,8 @@ if __name__ == "__main__":
     os.makedirs('./figures', exist_ok=True) 
     
     plt.title(f"基于{FIT_LRS_TYPE}拟合的Scaling law (R²={r_squared:.4f})", fontsize=14, pad=15)
-    plt.xlabel("训练步数", fontsize=12)
-    plt.ylabel("交叉熵损失", fontsize=12)
+    plt.xlabel("Step", fontsize=12)
+    plt.ylabel("Loss", fontsize=12)
     plt.yscale('log')
     
     param_text = (f"拟合参数:\n"
