@@ -10,10 +10,10 @@ plt.rcParams['axes.unicode_minus'] = False
 
 def load_data(path):
     with open(path, 'rb') as f:
-        loaded_data = pickle.load(f)  
+        ld = pickle.load(f)
     
-    def process_df(df_key):
-        df = loaded_data[df_key]
+    def proc_df(k):
+        df = ld[k]
         return {
             'steps': df['step'].values.astype(int),
             'losses': df['Metrics/loss'].values.astype(np.float64),
@@ -21,47 +21,46 @@ def load_data(path):
         }
     
     return {
-        '8-1-1': process_df('M:100M_gpt_D:20B_scheduler:811_rope'),
-        'WSD': process_df('M:100M_gpt_D:20B_scheduler:wsd_rope'),
-        'cosine': process_df('M:100M_gpt_D:20B_scheduler:cosine_rope')
+        '8-1-1': proc_df('M:100M_gpt_D:20B_scheduler:811_rope'),
+        'WSD': proc_df('M:100M_gpt_D:20B_scheduler:wsd_rope'),
+        'cosine': proc_df('M:100M_gpt_D:20B_scheduler:cosine_rope')
     }
 
-def compute_S1_S2(lr_sequence, decay_factor=0.999):
-    S1_total = np.cumsum(lr_sequence).astype(np.float64)  
-    momentum = np.zeros_like(lr_sequence)
-    for i in range(1, len(lr_sequence)):
-        momentum[i] = decay_factor * momentum[i-1] + (lr_sequence[i-1] - lr_sequence[i])
-    return S1_total, np.cumsum(momentum)
+def compute_s1s2(lr_arr, df=0.999):
+    s1_cum = np.cumsum(lr_arr).astype(np.float64)
+    mom = np.zeros_like(lr_arr)
+    for i in range(1, len(lr_arr)):
+        mom[i] = df * mom[i-1] + (lr_arr[i-1] - lr_arr[i])
+    return s1_cum, np.cumsum(mom)
 
-def scaling_law(steps, S1_vals, S2_vals, L0, A, C, alpha): 
-    valid_steps = np.clip(steps, 0, len(S1_vals)-1)
-    return L0 + A * (np.clip(S1_vals[valid_steps], 1e-10, None) ** (-alpha)) - C * S2_vals[valid_steps]
+def scaling_func(steps, s1_arr, s2_arr, L0, A, C, alpha):
+    vs = np.clip(steps, 0, len(s1_arr)-1)
+    return L0 + A * (np.clip(s1_arr[vs], 1e-10, None) ** (-alpha)) - C * s2_arr[vs]
 
-def log_mse_loss(pred, true):
-    log_pred = np.log(np.clip(pred, 1e-10, None))
-    log_true = np.log(np.clip(true, 1e-10, None))
-    return np.mean((log_pred - log_true)**2)
+def log_mse(p, t):
+    lp = np.log(np.clip(p, 1e-10, None))
+    lt = np.log(np.clip(t, 1e-10, None))
+    return np.mean((lp - lt)**2)
 
-def objective(current_params, fit_data_dict): 
-    L0, A, C, alpha = current_params
-    pred_loss = scaling_law(fit_data_dict['steps'], fit_data_dict['S1'], fit_data_dict['S2'], L0, A, C, alpha)
-    return log_mse_loss(pred_loss, fit_data_dict['losses'])
+def obj_func(prms, dt):
+    L0, A, C, alpha = prms
+    p = scaling_func(dt['steps'], dt['S1'], dt['S2'], L0, A, C, alpha)
+    return log_mse(p, dt['losses'])
 
 if __name__ == "__main__":
-    # 配置参数
-    FIT_LRS_TYPE = '8-1-1'
-    PREDICT_LRS_TYPES = ['8-1-1', 'WSD', 'cosine']
+    FIT_TYPE = '8-1-1'
+    PREDICT_TYPES = ['8-1-1', 'WSD', 'cosine']
     SAMPLE_RATIO = 0.4
-    DISPLAY_INTERVAL = 400
+    DISPLAY_INT = 400
     
-    GRID_CONFIG = {
+    GRID_CFG = {
         'L0': np.linspace(0.01, 3.0, 5),
         'A': np.linspace(0.01, 3.0, 5),
         'C': np.linspace(0.01, 1.0, 5),
         'alpha': np.linspace(0.01, 1.0, 5)
     }
     
-    OPTIM_CONFIG = {
+    OPTIM_CFG = {
         'method': 'L-BFGS-B',
         'bounds': [(0.01, 3.0), (0.01, 3.0), (0.01, 1.0), (0.01, 1.0)],
         'options': {
@@ -72,95 +71,89 @@ if __name__ == "__main__":
         }
     }
 
-    data_dict = load_data('../loss curves/gpt_loss+lrs.pkl') 
+    data = load_data('../loss curves/gpt_loss+lrs.pkl')
     
-    # 拟合数据准备
-    raw_fit_data = data_dict[FIT_LRS_TYPE]
-    n_total = len(raw_fit_data['steps'])
-    sample_size = int(n_total * SAMPLE_RATIO)
-    sample_idx = np.sort(np.random.choice(n_total, sample_size, replace=False))
+    raw = data[FIT_TYPE]
+    n_total = len(raw['steps'])
+    s_size = int(n_total * SAMPLE_RATIO)
+    sidx = np.sort(np.random.choice(n_total, s_size, replace=False))
     
-    S1_full, S2_full = compute_S1_S2(raw_fit_data['lrs'])
-    fit_data_dict = {
+    s1f, s2f = compute_s1s2(raw['lrs'])
+    fdata = {
         'steps': np.arange(n_total),
-        'losses': raw_fit_data['losses'],
-        'S1': S1_full,
-        'S2': S2_full
+        'losses': raw['losses'],
+        'S1': s1f,
+        'S2': s2f
     }
-    sampled_data = {k: v[sample_idx] for k, v in fit_data_dict.items()}
+    sampled = {k: v[sidx] for k, v in fdata.items()}
 
-    param_combinations = list(product(*GRID_CONFIG.values()))
-    best_params, best_loss = None, np.inf
+    p_combs = list(product(*GRID_CFG.values()))
+    bp, bl = None, np.inf
     
-    for current_params in param_combinations:  
-        res = minimize(objective, current_params, args=(sampled_data,), **OPTIM_CONFIG)
-        if res.success and res.fun < best_loss:
-            best_params, best_loss = res.x, res.fun
+    for pc in p_combs:
+        res = minimize(obj_func, pc, args=(sampled,), **OPTIM_CFG)
+        if res.success and res.fun < bl:
+            bp, bl = res.x, res.fun
 
-    all_true, all_pred = [], []
-    for lrs_type in PREDICT_LRS_TYPES:
-        target_data = data_dict[lrs_type]
-        lr_seq = target_data['lrs']
-        S1_vals, S2_vals = compute_S1_S2(lr_seq) 
-        pred_values = scaling_law(np.arange(len(S1_vals)), S1_vals, S2_vals, *best_params)
+    if bp is None:
+        raise RuntimeError("Optimization failed")
+
+    ta, pa = [], []
+    for lt in PREDICT_TYPES:
+        td = data[lt]
+        lr = td['lrs']
+        s1v, s2v = compute_s1s2(lr)
+        pv = scaling_func(np.arange(len(s1v)), s1v, s2v, *bp)
         
-        all_true.extend(target_data['losses'])
-        all_pred.extend(pred_values)
+        ta.extend(td['losses'])
+        pa.extend(pv)
 
-    # 计算总体R²
-    all_true = np.array(all_true)
-    all_pred = np.array(all_pred)
-    ss_res = np.sum((all_true - all_pred) ** 2)
-    ss_tot = np.sum((all_true - np.mean(all_true)) ** 2)
-    r_squared = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
+    ta = np.array(ta)
+    pa = np.array(pa)
+    ssr = np.sum((ta - pa) ** 2)
+    sst = np.sum((ta - np.mean(ta)) ** 2)
+    r2 = 1 - (ssr / sst) if sst != 0 else 0.0
 
-    # 绘图配置
-    plt.figure(figsize=(14, 7))
-    style_config = {
-        '8-1-1': {'color': '#1f77b4', 'marker': 'o', 'label': '8-1-1_LRS'},
-        'WSD': {'color': '#ff7f0e', 'marker': 's', 'label': 'WSD_LRS'},
-        'cosine': {'color': '#2ca02c', 'marker': 'D', 'label': '余弦_LRS'}
+    plt.figure(figsize=(14,7))
+    scfg = {
+        '8-1-1': {'c':'#1f77b4','m':'o','l':'8-1-1_LRS'},
+        'WSD': {'c':'#ff7f0e','m':'s','l':'WSD_LRS'},
+        'cosine': {'c':'#2ca02c','m':'D','l':'余弦_LRS'}
     }
     
-    for lrs_type in PREDICT_LRS_TYPES:
-        target_data = data_dict[lrs_type]
-        lr_seq = target_data['lrs']
-        S1_vals, S2_vals = compute_S1_S2(lr_seq)
-        pred_values = scaling_law(np.arange(len(S1_vals)), S1_vals, S2_vals, *best_params)
+    for lt in PREDICT_TYPES:
+        td = data[lt]
+        lr = td['lrs']
+        s1v, s2v = compute_s1s2(lr)
+        pvals = scaling_func(np.arange(len(s1v)), s1v, s2v, *bp)
         
-        plt.plot(target_data['steps'], pred_values,
-                 color=style_config[lrs_type]['color'],
-                 linewidth=2,
-                 linestyle='--' if lrs_type != FIT_LRS_TYPE else '-',
-                 label=f"{style_config[lrs_type]['label']}预测损失")
+        plt.plot(td['steps'], pvals,
+                 color=scfg[lt]['c'],
+                 lw=2,
+                 ls='--' if lt != FIT_TYPE else '-',
+                 label=f"{scfg[lt]['l']}预测")
         
-        display_idx = np.arange(0, len(target_data['steps']), DISPLAY_INTERVAL)
-        plt.scatter(target_data['steps'][display_idx], target_data['losses'][display_idx],
-                    s=10, edgecolor=style_config[lrs_type]['color'],
-                    facecolor='white',
-                    marker=style_config[lrs_type]['marker'],
-                    linewidth=1.5,
-                    label=f"{style_config[lrs_type]['label']}实际损失")
+        didx = np.arange(0, len(td['steps']), DISPLAY_INT)
+        plt.scatter(td['steps'][didx], td['losses'][didx],
+                    s=10, ec=scfg[lt]['c'],
+                    fc='white',
+                    marker=scfg[lt]['m'],
+                    lw=1.5,
+                    label=f"{scfg[lt]['l']}实际")
 
     os.makedirs('./figures', exist_ok=True)
     
-    plt.title(f"基于{FIT_LRS_TYPE}拟合的Scaling law (R²={r_squared:.4f})", fontsize=14, pad=15)
+    plt.title(f"基于{FIT_TYPE}拟合的Scaling law (R²={r2:.4f})", fontsize=14, pad=15)
     plt.xlabel("Step", fontsize=12)
     plt.ylabel("Loss", fontsize=12)
     plt.yscale('log')
     
-    param_text = (f"拟合参数:\n"
-                 f"L0 = {best_params[0]:.3f}\n"
-                 f"A = {best_params[1]:.3f}\n"
-                 f"C = {best_params[2]:.3f}\n"
-                 f"α = {best_params[3]:.3f}")
-    plt.text(0.97, 0.95, param_text,
-             transform=plt.gca().transAxes,
-             verticalalignment='top', horizontalalignment='right',
-             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    ptxt = (f"拟合参数:\nL0={bp[0]:.3f}\nA={bp[1]:.3f}\nC={bp[2]:.3f}\nα={bp[3]:.3f}")
+    plt.text(0.97,0.95, ptxt, transform=plt.gca().transAxes,
+             va='top', ha='right', bbox=dict(boxstyle='round', fc='white', alpha=0.8))
     
     plt.legend(ncol=3, loc='lower left', fontsize=10)
     plt.grid(alpha=0.2)
     plt.tight_layout()
-    plt.savefig('./figures/cross_scheduler_prediction.png', dpi=300, bbox_inches='tight')
+    plt.savefig('./figures/cross_pred.png', dpi=300, bbox_inches='tight')
     plt.show()
