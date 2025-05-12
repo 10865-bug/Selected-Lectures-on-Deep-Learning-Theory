@@ -51,10 +51,9 @@ def obj_func(params, data):
 if __name__ == "__main__":
     FIT_TYPE = '8-1-1'
     PREDICT_TYPES = ['8-1-1', 'WSD', 'cosine']
-    SAMPLE_RATIO = 0.4    # 采样比例 (0~1)
-    DISPLAY_INT = 400     # 散点显示间隔
+    SAMPLE_RATIO = 0.4    
+    DISPLAY_INT = 400     
     
-    # 网格搜索配置 (每个参数设置点数)
     GRID_CFG = {
         'L0':    np.linspace(0.1, 2.0, num=2),   
         'A':     np.linspace(0.5, 2.5, num=2),   
@@ -65,7 +64,6 @@ if __name__ == "__main__":
         'gamma': np.linspace(0.3, 0.7, num=2)   
     }
     
-    # 优化器配置
     OPTIM_CFG = {
         'method': 'L-BFGS-B',
         'bounds': [
@@ -85,11 +83,9 @@ if __name__ == "__main__":
         }
     }
 
-    # 数据加载与预处理
     data = load_data('../loss curves/gpt_loss+lrs.pkl')
     raw = data[FIT_TYPE]
     
-    # 创建采样数据
     n_total = len(raw['steps'])
     s_size = int(n_total * SAMPLE_RATIO)
     sidx = np.sort(np.random.choice(n_total, s_size, replace=False))
@@ -100,17 +96,15 @@ if __name__ == "__main__":
         'lrs': raw['lrs'][sidx]
     }
 
-    # 网格搜索初始化
     p_combs = list(product(*GRID_CFG.values()))
     total_comb = len(p_combs)
     bp, bl = None, np.inf
 
-    # 网格搜索优化循环
+    # 网格搜索优化
     for idx, pc in enumerate(p_combs, 1):
         try:          
             print(f"\r拟合进度: {idx:03d}/{total_comb} ", end='', flush=True)
             
-            # 执行优化
             res = minimize(obj_func, pc, args=(sampled,), **OPTIM_CFG)
             
             if res.success and res.fun < bl:
@@ -119,6 +113,8 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"\n[警告] 参数组合 {pc} 失败: {str(e)}")
             continue
+        
+    print("\r" + " " * 40 + "\r", end='')
 
     if bp is None:
         raise RuntimeError("所有参数组合优化失败")
@@ -128,7 +124,7 @@ if __name__ == "__main__":
     for name, value in zip(param_names, bp):
         print(f"{name:6} = {value:.4f}")
 
-    # 可视化部分
+    # 可视化
     plt.figure(figsize=(14, 7))
     scfg = {
         '8-1-1': {'c':'#1f77b4','m':'o','l':'8-1-1_LRS'},
@@ -162,7 +158,6 @@ if __name__ == "__main__":
         ta.extend(td['losses'])
         pa.extend(pvals)
 
-    # 计算R²
     ta, pa = np.array(ta), np.array(pa)
     r2 = 1 - np.sum((ta - pa)**2) / np.sum((ta - np.mean(ta))**2)
     
