@@ -62,9 +62,9 @@ if __name__ == "__main__":
     
     OPTIM_CFG = {
         'method': 'L-BFGS-B',
-        'bounds': [(0.01, 3.0), (0.01, 3.0), (0.01, 1.0), (0.01, 1.0)],
+        'bounds': [(0.01, 5.0), (0.01, 5.0), (0.01, 5.0), (0.01, 5.0)],
         'options': {
-            'maxiter': 1000,
+            'maxiter': 2000,
             'ftol': 1e-6,
             'gtol': 1e-5,
             'disp': False
@@ -104,7 +104,9 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"\n警告: 参数组合 {pc} 优化失败 - {str(e)}")
             continue
-
+    
+    print("\r" + " " * 40 + "\r", end='')
+    
     if bp is None:
         raise RuntimeError("所有参数组合优化失败！")
 
