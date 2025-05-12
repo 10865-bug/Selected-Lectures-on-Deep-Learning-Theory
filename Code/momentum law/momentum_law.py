@@ -90,13 +90,28 @@ if __name__ == "__main__":
     p_combs = list(product(*GRID_CFG.values()))
     bp, bl = None, np.inf
     
-    for pc in p_combs:
-        res = minimize(obj_func, pc, args=(sampled,), **OPTIM_CFG)
-        if res.success and res.fun < bl:
-            bp, bl = res.x, res.fun
+    total_comb = len(p_combs)
+    
+    for idx, pc in enumerate(p_combs, 1):
+        try:
+            # 进度显示         
+            print(f"\r拟合进度: {idx}/{total_comb}", end='', flush=True)
+            
+            res = minimize(obj_func, pc, args=(sampled,), **OPTIM_CFG)
+            if res.success and res.fun < bl:
+                bp, bl = res.x, res.fun
+                
+        except Exception as e:
+            print(f"\n警告: 参数组合 {pc} 优化失败 - {str(e)}")
+            continue
 
     if bp is None:
-        raise RuntimeError("Optimization failed")
+        raise RuntimeError("所有参数组合优化失败！")
+
+    print("\r最佳参数组合:")
+    param_names = ['L0', 'A', 'C', 'alpha']
+    for name, value in zip(param_names, bp):
+        print(f"{name:6} = {value:.4f}")
 
     ta, pa = [], []
     for lt in PREDICT_TYPES:
@@ -156,4 +171,3 @@ if __name__ == "__main__":
     plt.grid(alpha=0.2)
     plt.tight_layout()
     plt.savefig('./figures/cross_pred.png', dpi=300, bbox_inches='tight')
-    plt.show()
