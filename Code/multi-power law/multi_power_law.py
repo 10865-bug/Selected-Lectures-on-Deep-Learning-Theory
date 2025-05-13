@@ -27,7 +27,6 @@ def load_data(path):
     }
 
 def compute_terms(lr_arr, gamma, beta, B, C):
-    """优化后的向量化计算函数"""
     lr_cumsum = np.concatenate([[0], np.cumsum(lr_arr)])
     delta_eta = np.concatenate([[0], lr_arr[:-1] - lr_arr[1:]])
     eta_k_pow = lr_arr ** (-gamma)
@@ -162,7 +161,7 @@ if __name__ == "__main__":
     r2 = 1 - np.sum((ta - pa)**2) / np.sum((ta - np.mean(ta))**2)
     
     # 图表装饰
-    plt.title(f"基于{FIT_TYPE}的多策略预测 (R²={r2:.4f})", fontsize=14)
+    plt.title(f"基于{FIT_TYPE}的多幂律预测 (R²={r2:.4f})", fontsize=14)
     plt.xlabel("训练步数", fontsize=12)
     plt.ylabel("损失值", fontsize=12)
     plt.yscale('log')
