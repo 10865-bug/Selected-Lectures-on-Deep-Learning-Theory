@@ -48,12 +48,12 @@ def obj_func(params, data):
 if __name__ == "__main__":
     FIT_TYPE = '8-1-1'
     PREDICT_TYPES = ['8-1-1', 'WSD', 'cosine']
-    SAMPLE_RATIO = 0.9   
+    SAMPLE_RATIO = 0.5   
     DISPLAY_INT = 1000     
     
     GRID_CFG = {
-        'L0': np.linspace(0.1, 2.0, 2),   
-        'A': np.linspace(0.5, 2.5, 2),   
+        'L0': np.linspace(1.0, 3.0, 2),   
+        'A': np.linspace(1.0, 3.0, 2),   
         'B': np.linspace(0.1, 500, 5),   
         'C': np.linspace(0.1, 0.9, 2),   
         'alpha': np.linspace(0.2, 0.8, 2),   
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     
     OPTIM_CFG = {
         'method': 'L-BFGS-B',
-        'bounds': [(0.1,3.0),(0.1,3.0),(0.1,500),(0.01,1.0),(0.01,1.0),(0.2,0.8),(0.2,0.8)],
+        'bounds': [(0.1,3.0),(0.1,3.0),(0.1,1000),(0.01,1.0),(0.01,1.0),(0.01,1.0),(0.01,1.0)],
         'options': {'maxiter':500,'ftol':1e-5,'gtol':1e-4,'disp':False}
     }
 
