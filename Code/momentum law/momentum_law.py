@@ -50,21 +50,21 @@ def obj_func(prms, dt):
 if __name__ == "__main__":
     FIT_TYPE = '8-1-1'
     PREDICT_TYPES = ['8-1-1', 'WSD', 'cosine']
-    SAMPLE_RATIO = 0.4
-    DISPLAY_INT = 400
+    SAMPLE_RATIO = 0.9
+    DISPLAY_INT = 1000
     
     GRID_CFG = {
-        'L0': np.linspace(0.01, 3.0, 5),
-        'A': np.linspace(0.01, 3.0, 5),
-        'C': np.linspace(0.01, 1.0, 5),
-        'alpha': np.linspace(0.01, 1.0, 5)
+        'L0': np.linspace(1.0, 3.0, 10),
+        'A': np.linspace(1.0, 3.0, 10),
+        'C': np.linspace(0.01, 0.2, 30),
+        'alpha': np.linspace(0.01, 1.0, 10)
     }
     
     OPTIM_CFG = {
         'method': 'L-BFGS-B',
-        'bounds': [(0.01, 5.0), (0.01, 5.0), (0.01, 5.0), (0.01, 5.0)],
+        'bounds': [(0.01, 5.0), (0.01, 5.0), (0.01, 1.0), (0.01, 1.0)],
         'options': {
-            'maxiter': 2000,
+            'maxiter': 100,
             'ftol': 1e-6,
             'gtol': 1e-5,
             'disp': False
@@ -94,13 +94,10 @@ if __name__ == "__main__":
     
     for idx, pc in enumerate(p_combs, 1):
         try:
-            # 进度显示         
             print(f"\r拟合进度: {idx}/{total_comb}", end='', flush=True)
-            
             res = minimize(obj_func, pc, args=(sampled,), **OPTIM_CFG)
             if res.success and res.fun < bl:
                 bp, bl = res.x, res.fun
-                
         except Exception as e:
             print(f"\n警告: 参数组合 {pc} 优化失败 - {str(e)}")
             continue
@@ -115,15 +112,11 @@ if __name__ == "__main__":
     for name, value in zip(param_names, bp):
         print(f"{name:6} = {value:.4f}")
 
-    ta, pa = [], []
-    for lt in PREDICT_TYPES:
-        td = data[lt]
-        lr = td['lrs']
-        s1v, s2v = compute_s1s2(lr)
-        pv = scaling_func(np.arange(len(s1v)), s1v, s2v, *bp)
-        
-        ta.extend(td['losses'])
-        pa.extend(pv)
+    td = data[FIT_TYPE]
+    lr = td['lrs']
+    s1v, s2v = compute_s1s2(lr)
+    pa = scaling_func(np.arange(len(s1v)), s1v, s2v, *bp)
+    ta = td['losses']
 
     ta = np.array(ta)
     pa = np.array(pa)
@@ -172,4 +165,4 @@ if __name__ == "__main__":
     plt.legend(ncol=3, loc='lower left', fontsize=10)
     plt.grid(alpha=0.2)
     plt.tight_layout()
-    plt.savefig('./figures/cross_pred.png', dpi=300, bbox_inches='tight')
+    plt.savefig('./figures/momentum_law_fit.png', dpi=300, bbox_inches='tight')
