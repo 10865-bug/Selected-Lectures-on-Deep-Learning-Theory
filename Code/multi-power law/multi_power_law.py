@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import torch
 import torch.optim as optim
 import os
-import sys
 from scipy.stats import linregress
 from itertools import product
 
@@ -63,115 +62,114 @@ class PowerLawModel(torch.nn.Module):
         
         return torch.clamp(L0 + base_term - dynamic_term, min=1e-5)
 
-def initialize_params(data, train_key):
-    losses = data[train_key]['losses']
-    lrs = data[train_key]['lrs']
+def initialize_params(train_data):
+    losses = train_data['losses']
+    lrs = train_data['lrs']
     
     valid_idx = (losses > 1e-3) & (lrs > 1e-6)
     log_y = np.log(losses[valid_idx])
     log_x = np.log(np.cumsum(lrs)[valid_idx])
-    slope, intercept = linregress(log_x, log_y)[:2]
+    _, _ = linregress(log_x, log_y)[:2]
     
     return {
         'L0': np.linspace(1.0, 3.0, 2),
         'A': np.linspace(1.0, 3.0, 2),
-        'B': np.linspace(100, 500, 4),  
+        'B': np.linspace(100, 400, 3),  
         'C': np.linspace(0.01, 0.5, 2),
         'alpha': np.linspace(0.1, 1.0, 2),
         'beta': np.linspace(0.3, 1.0, 2),  
         'gamma': np.linspace(0.1, 0.8, 2)  
     }
 
-def train_model(data, train_key, rho=0.5, lr1=1e-3, lr2=1e-4, max_steps=1000):
-    param_grid = initialize_params(data, train_key)
+def train_model(train_data, rho=0.5, lr1=1e-3, lr2=1e-3, max_steps=1000):
+    param_grid = initialize_params(train_data)
     p_combs = list(product(*param_grid.values()))
     
-    best_params, best_loss = None, float('inf')
-    full_size = len(data[train_key]['lrs'])
+    final_params, min_loss = None, float('inf')
+    full_size = len(train_data['lrs'])
     sample_size = int(full_size * rho)
     
     for idx, params in enumerate(p_combs, 1):
+        current_model = PowerLawModel(*params).to(device)
+        optimzier = optim.AdamW([
+            {'params': [current_model.log_L0, current_model.log_A, current_model.log_B, current_model.log_C], 'lr': lr1},
+            {'params': [current_model.log_alpha, current_model.log_beta, current_model.log_gamma], 'lr': lr2}
+        ])
+        
+        lrs_t = torch.tensor(train_data['lrs'], dtype=torch.float32, device=device)
+        losses_t = torch.tensor(train_data['losses'], dtype=torch.float32, device=device)
+        idxs = torch.randperm(full_size, device=device)[:sample_size]
+        
         try:
             print(f"\r拟合进度: {idx}/{len(p_combs)}", end='')
             
-            model = PowerLawModel(*params).to(device)
-            optimizer = optim.AdamW([
-                {'params': [model.log_L0, model.log_A, model.log_B, model.log_C], 'lr': lr1},
-                {'params': [model.log_alpha, model.log_beta, model.log_gamma], 'lr': lr2}
-            ])
-            
-            lrs_tensor = torch.tensor(data[train_key]['lrs'], dtype=torch.float32, device=device)
-            losses_tensor = torch.tensor(data[train_key]['losses'], dtype=torch.float32, device=device)
-            
-            indices = torch.randperm(full_size, device=device)[:sample_size]
-            
-            for step in range(max_steps):
-                def closure():
-                    optimizer.zero_grad()
-                    pred = model(lrs_tensor)[indices]
-                    loss = torch.mean((torch.log(pred) - torch.log(losses_tensor[indices])) ** 2)
+            for _ in range(max_steps):
+                def closure(m=current_model, l=lrs_t, t=losses_t, i=idxs):
+                    optimzier.zero_grad()
+                    p = m(l)[i]
+                    loss = torch.mean((torch.log(p) - torch.log(t[i])) ** 2)
                     loss.backward()
                     return loss
                 
-                loss = optimizer.step(closure)
+                loss_val = optimzier.step(closure)
                 
-                if loss.item() < best_loss:
-                    best_loss = loss.item()
-                    best_params = {
-                        'L0': torch.exp(model.log_L0).item(),
-                        'A': torch.exp(model.log_A).item(),
-                        'B': torch.exp(model.log_B).item(),
-                        'C': torch.exp(model.log_C).item(),
-                        'alpha': torch.exp(model.log_alpha).item(),
-                        'beta': torch.exp(model.log_beta).item(),
-                        'gamma': torch.exp(model.log_gamma).item()
+                if loss_val.item() < min_loss:
+                    min_loss = loss_val.item()
+                    final_params = {
+                        'L0': torch.exp(current_model.log_L0).item(),
+                        'A': torch.exp(current_model.log_A).item(),
+                        'B': torch.exp(current_model.log_B).item(),
+                        'C': torch.exp(current_model.log_C).item(),
+                        'alpha': torch.exp(current_model.log_alpha).item(),
+                        'beta': torch.exp(current_model.log_beta).item(),
+                        'gamma': torch.exp(current_model.log_gamma).item()
                     }
         
         except Exception as e:
-            print(f"\n警告: 参数组合 {params} 优化失败 - {str(e)}")
+            print(f"\n参数组合异常: {params} - {str(e)}")
             continue
     
     print("\r" + " " * 40 + "\r", end='')
-    return best_params, best_loss
+    return final_params, min_loss
 
-def plot_results(data, best_params, fit_type='8-1-1'):
-    plt.figure(figsize=(14,7))
-    scfg = {
+def plot_results(dataset, params, fit_type='8-1-1'):
+    fig = plt.figure(figsize=(14,7))
+    style_config = {
         '8-1-1': {'c':'#1f77b4','m':'o','l':'8-1-1_LRS'},
         'WSD': {'c':'#ff7f0e','m':'s','l':'WSD_LRS'},
         'cosine': {'c':'#2ca02c','m':'D','l':'余弦_LRS'}
     }
     
-    model = PowerLawModel(**best_params).to(device)
+    predictor = PowerLawModel(**params).to(device)
     with torch.no_grad():
-        pred = model(torch.tensor(data[fit_type]['lrs'], device=device)).cpu().numpy()
-    ta = data[fit_type]['losses']
-    r2 = 1 - np.sum((ta - pred)**2) / np.sum((ta - np.mean(ta))**2)
+        predictions = predictor(torch.tensor(dataset[fit_type]['lrs'], device=device)).cpu().numpy()
+    actual = dataset[fit_type]['losses']
+    r_squared = 1 - np.sum((actual - predictions)**2) / np.sum((actual - np.mean(actual))**2)
     
     for lt in ['8-1-1', 'WSD', 'cosine']:
-        td = data[lt]
+        target_data = dataset[lt]
         with torch.no_grad():
-            pred = model(torch.tensor(td['lrs'], device=device)).cpu().numpy()
+            pred_values = predictor(torch.tensor(target_data['lrs'], device=device)).cpu().numpy()
         
-        plt.plot(td['steps'], pred, color=scfg[lt]['c'], lw=2,
-                 ls='--' if lt != fit_type else '-', label=f"{scfg[lt]['l']}预测")
-        plt.scatter(td['steps'][::1000], td['losses'][::1000], s=10,
-                    ec=scfg[lt]['c'], fc='white', marker=scfg[lt]['m'])
+        plt.plot(target_data['steps'], pred_values, color=style_config[lt]['c'], lw=2,
+                 ls='--' if lt != fit_type else '-', label=f"{style_config[lt]['l']}预测")
+        plt.scatter(target_data['steps'][::1000], target_data['losses'][::1000], s=10,
+                    ec=style_config[lt]['c'], fc='white', marker=style_config[lt]['m'])
     
     os.makedirs('./figures', exist_ok=True)
-    plt.title(f"基于{fit_type}的多幂律预测 (R²={r2:.4f})", fontsize=14)
+    plt.title(f"基于{fit_type}的多幂律预测 (R²={r_squared:.4f})", fontsize=14)
     plt.xlabel("Step"); plt.ylabel("Loss"); plt.yscale('log')
     
-    param_text = "\n".join([
-        f"L0 = {best_params['L0']:.4f}",
-        f"A  = {best_params['A']:.4f}",
-        f"B  = {best_params['B']:.4f}",
-        f"C  = {best_params['C']:.4f}",
-        f"α  = {best_params['alpha']:.4f}",
-        f"β  = {best_params['beta']:.4f}",
-        f"γ  = {best_params['gamma']:.4f}"
+    param_display = "\n".join([
+        f"L0 = {params['L0']:.4f}",
+        f"A  = {params['A']:.4f}",
+        f"B  = {params['B']:.4f}",
+        f"C  = {params['C']:.4f}",
+        f"α  = {params['alpha']:.4f}",
+        f"β  = {params['beta']:.4f}",
+        f"γ  = {params['gamma']:.4f}"
     ])
-    plt.text(0.97, 0.95, param_text, transform=plt.gca().transAxes,
+    plt.text(0.97, 0.95, param_display, transform=fig.gca().transAxes,
              va='top', ha='right', bbox=dict(facecolor='white', alpha=0.8))
     
     plt.legend(ncol=3, loc='lower left', fontsize=10)
@@ -181,9 +179,9 @@ def plot_results(data, best_params, fit_type='8-1-1'):
 
 if __name__ == "__main__":
     FIT_TYPE = '8-1-1'
-    data = load_data('../loss curves/gpt_loss+lrs.pkl')
+    dataset = load_data('../loss curves/gpt_loss+lrs.pkl')
     
-    best_params, best_loss = train_model(data, FIT_TYPE, rho=1.0)
+    best_params, best_loss = train_model(dataset[FIT_TYPE], rho=1.0)
     
     if best_params:
         print("\n最佳参数:")
@@ -194,6 +192,6 @@ if __name__ == "__main__":
         print(f"α  = {best_params['alpha']:.4f}")
         print(f"β  = {best_params['beta']:.4f}")
         print(f"γ  = {best_params['gamma']:.4f}")
-        plot_results(data, best_params)
+        plot_results(dataset, best_params)
     else:
         print("所有参数组合优化失败！")
