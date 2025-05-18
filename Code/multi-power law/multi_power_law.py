@@ -72,16 +72,16 @@ def initialize_params(train_data):
     _, _ = linregress(log_x, log_y)[:2]
     
     return {
-        'L0': np.linspace(1.0, 3.0, 2),
-        'A': np.linspace(1.0, 3.0, 2),
-        'B': np.linspace(100, 400, 3),  
-        'C': np.linspace(0.01, 0.5, 2),
-        'alpha': np.linspace(0.1, 1.0, 2),
-        'beta': np.linspace(0.3, 1.0, 2),  
-        'gamma': np.linspace(0.1, 0.8, 2)  
+        'L0': np.linspace(2.0, 3.0, 2),
+        'A': np.linspace(1.0, 2.0, 2),
+        'B': np.linspace(100, 400, 2),  
+        'C': np.linspace(0.01, 0.4, 3),
+        'alpha': np.linspace(0.3, 0.8, 2),
+        'beta': np.linspace(0.2, 0.6, 2),  
+        'gamma': np.linspace(0.1, 0.6, 2)  
     }
 
-def train_model(train_data, rho=0.5, lr1=1e-3, lr2=1e-3, max_steps=1000):
+def train_model(train_data, rho=0.5, lr1=4e-3, lr2=1e-4, max_steps=1000):
     param_grid = initialize_params(train_data)
     p_combs = list(product(*param_grid.values()))
     
