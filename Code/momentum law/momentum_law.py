@@ -50,21 +50,21 @@ def obj_func(prms, dt):
 if __name__ == "__main__":
     FIT_TYPE = '8-1-1'
     PREDICT_TYPES = ['8-1-1', 'WSD', 'cosine']
-    SAMPLE_RATIO = 0.9
+    SAMPLE_RATIO = 1.0
     DISPLAY_INT = 1000
     
     GRID_CFG = {
-        'L0': np.linspace(1.0, 3.0, 10),
-        'A': np.linspace(1.0, 3.0, 10),
-        'C': np.linspace(0.01, 0.2, 30),
-        'alpha': np.linspace(0.01, 1.0, 10)
+        'L0': np.linspace(2.0, 3.0, 5),
+        'A': np.linspace(1.0, 1.5, 5),
+        'C': np.linspace(0.01, 0.1, 5),
+        'alpha': np.linspace(0.3, 0.7, 5)
     }
     
     OPTIM_CFG = {
         'method': 'L-BFGS-B',
-        'bounds': [(0.01, 5.0), (0.01, 5.0), (0.01, 1.0), (0.01, 1.0)],
+        'bounds': [(0.01, 5.0), (0.01, 5.0), (0.001, 1.0), (0.01, 1.0)],
         'options': {
-            'maxiter': 100,
+            'maxiter': 1000,
             'ftol': 1e-6,
             'gtol': 1e-5,
             'disp': False
