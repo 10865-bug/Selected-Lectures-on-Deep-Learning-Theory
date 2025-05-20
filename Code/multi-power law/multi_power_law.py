@@ -74,11 +74,11 @@ def initialize_params(train_data):
     return {
         'L0': np.linspace(2.0, 3.0, 2),
         'A': np.linspace(1.0, 2.0, 2),
-        'B': np.linspace(100, 400, 2),  
-        'C': np.linspace(0.01, 0.4, 3),
+        'B': np.linspace(1, 20, 4),  
+        'C': np.linspace(0.001, 0.1, 2),
         'alpha': np.linspace(0.3, 0.8, 2),
-        'beta': np.linspace(0.2, 0.6, 2),  
-        'gamma': np.linspace(0.1, 0.6, 2)  
+        'beta': np.linspace(0.2, 0.8, 2),  
+        'gamma': np.linspace(0.1, 0.5, 2)  
     }
 
 def train_model(train_data, rho=0.5, lr1=4e-3, lr2=1e-4, max_steps=1000):
