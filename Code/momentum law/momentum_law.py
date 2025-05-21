@@ -54,7 +54,7 @@ if __name__ == "__main__":
     DISPLAY_INT = 1000
     
     GRID_CFG = {
-        'L0': np.linspace(2.0, 3.0, 5),
+        'L0': np.linspace(2.3, 2.7, 5),
         'A': np.linspace(1.0, 1.5, 5),
         'C': np.linspace(0.01, 0.1, 5),
         'alpha': np.linspace(0.3, 0.7, 5)
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     
     OPTIM_CFG = {
         'method': 'L-BFGS-B',
-        'bounds': [(0.01, 5.0), (0.01, 5.0), (0.001, 1.0), (0.01, 1.0)],
+        'bounds': [(0.001, 10.0), (0.001, 10.0), (0.001, 10.0), (0.001, 10.0)],
         'options': {
             'maxiter': 1000,
             'ftol': 1e-6,
