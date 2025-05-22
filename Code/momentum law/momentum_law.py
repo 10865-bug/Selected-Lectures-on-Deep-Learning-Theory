@@ -48,21 +48,21 @@ def obj_func(prms, dt):
     return log_mse(p, dt['losses'])
 
 if __name__ == "__main__":
-    FIT_TYPE = '8-1-1'
+    FIT_TYPE = 'cosine'
     PREDICT_TYPES = ['8-1-1', 'WSD', 'cosine']
     SAMPLE_RATIO = 1.0
     DISPLAY_INT = 1000
     
     GRID_CFG = {
-        'L0': np.linspace(2.3, 2.7, 5),
-        'A': np.linspace(1.0, 1.5, 5),
-        'C': np.linspace(0.01, 0.1, 5),
+        'L0': np.linspace(2.0, 3.0, 5),
+        'A': np.linspace(1.0, 2.0, 5),
+        'C': np.linspace(0.0001, 0.1, 5),
         'alpha': np.linspace(0.3, 0.7, 5)
     }
     
     OPTIM_CFG = {
         'method': 'L-BFGS-B',
-        'bounds': [(0.001, 10.0), (0.001, 10.0), (0.001, 10.0), (0.001, 10.0)],
+        'bounds': [(0.001, 10.0), (0.0001, 10.0), (0.001, 10.0), (0.001, 10.0)],
         'options': {
             'maxiter': 1000,
             'ftol': 1e-6,
