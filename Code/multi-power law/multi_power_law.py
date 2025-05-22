@@ -74,7 +74,7 @@ def initialize_params(train_data):
     return {
         'L0': np.linspace(2.0, 3.0, 2),
         'A': np.linspace(1.0, 2.0, 2),
-        'B': np.linspace(1, 20, 4),  
+        'B': np.linspace(1, 20, 2),  
         'C': np.linspace(0.001, 0.1, 2),
         'alpha': np.linspace(0.3, 0.8, 2),
         'beta': np.linspace(0.2, 0.8, 2),  
