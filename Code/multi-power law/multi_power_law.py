@@ -133,7 +133,7 @@ def train_model(train_data, rho=0.5, lr1=4e-3, lr2=1e-4, max_steps=1000):
     return final_params, min_loss
 
 def plot_results(dataset, params, fit_type='8-1-1'):
-    fig = plt.figure(figsize=(14,7))
+    fig = plt.figure(figsize=(12,6))
     style_config = {
         '8-1-1': {'c':'#1f77b4','m':'o','l':'8-1-1_LRS'},
         'WSD': {'c':'#ff7f0e','m':'s','l':'WSD_LRS'},
@@ -151,14 +151,17 @@ def plot_results(dataset, params, fit_type='8-1-1'):
         with torch.no_grad():
             pred_values = predictor(torch.tensor(target_data['lrs'], device=device)).cpu().numpy()
         
-        plt.plot(target_data['steps'], pred_values, color=style_config[lt]['c'], lw=2,
+        plt.plot(target_data['steps'], pred_values, color=style_config[lt]['c'], lw=1.5,
                  ls='--' if lt != fit_type else '-', label=f"{style_config[lt]['l']}预测")
         plt.scatter(target_data['steps'][::1000], target_data['losses'][::1000], s=10,
-                    ec=style_config[lt]['c'], fc='white', marker=style_config[lt]['m'])
+                    ec=style_config[lt]['c'], fc='white', marker=style_config[lt]['m'],
+                    label=f"{style_config[lt]['l']}实际")
     
     os.makedirs('./figures', exist_ok=True)
     plt.title(f"基于{fit_type}拟合的Multi-power law (R²={r_squared:.4f})", fontsize=14)
-    plt.xlabel("Step"); plt.ylabel("Loss"); plt.yscale('log')
+    plt.xlabel("Step", fontsize=20)
+    plt.ylabel("Loss", fontsize=20)
+    plt.yscale('log')
     
     param_display = "\n".join([
         f"L0 = {params['L0']:.4f}",
@@ -172,7 +175,12 @@ def plot_results(dataset, params, fit_type='8-1-1'):
     plt.text(0.97, 0.95, param_display, transform=fig.gca().transAxes,
              va='top', ha='right', bbox=dict(facecolor='white', alpha=0.8))
     
-    plt.legend(ncol=3, loc='lower left', fontsize=10)
+    plt.legend(ncol=3,
+               loc='upper center',
+               bbox_to_anchor=(0.5, 1.0),
+               fontsize=10,
+               frameon=True,
+               borderaxespad=0.5)
     plt.grid(alpha=0.2)
     plt.tight_layout()
     plt.savefig('./figures/multi_power_law_fit.png', dpi=300, bbox_inches='tight')
