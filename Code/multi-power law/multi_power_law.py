@@ -157,7 +157,7 @@ def plot_results(dataset, params, fit_type='8-1-1'):
                     ec=style_config[lt]['c'], fc='white', marker=style_config[lt]['m'])
     
     os.makedirs('./figures', exist_ok=True)
-    plt.title(f"基于{fit_type}的多幂律预测 (R²={r_squared:.4f})", fontsize=14)
+    plt.title(f"基于{fit_type}拟合的Multi-power law (R²={r_squared:.4f})", fontsize=14)
     plt.xlabel("Step"); plt.ylabel("Loss"); plt.yscale('log')
     
     param_display = "\n".join([
