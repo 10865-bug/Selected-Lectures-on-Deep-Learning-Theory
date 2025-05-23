@@ -124,7 +124,7 @@ if __name__ == "__main__":
     sst = np.sum((ta - np.mean(ta)) ** 2)
     r2 = 1 - (ssr / sst) if sst != 0 else 0.0
 
-    plt.figure(figsize=(14,7))
+    plt.figure(figsize=(12,6))
     scfg = {
         '8-1-1': {'c':'#1f77b4','m':'o','l':'8-1-1_LRS'},
         'WSD': {'c':'#ff7f0e','m':'s','l':'WSD_LRS'},
@@ -139,7 +139,7 @@ if __name__ == "__main__":
         
         plt.plot(td['steps'], pvals,
                  color=scfg[lt]['c'],
-                 lw=2,
+                 lw=1.5,
                  ls='--' if lt != FIT_TYPE else '-',
                  label=f"{scfg[lt]['l']}预测")
         
@@ -154,15 +154,21 @@ if __name__ == "__main__":
     os.makedirs('./figures', exist_ok=True)
     
     plt.title(f"基于{FIT_TYPE}拟合的Momentum law (R²={r2:.4f})", fontsize=14, pad=15)
-    plt.xlabel("Step", fontsize=12)
-    plt.ylabel("Loss", fontsize=12)
+    plt.xlabel("Step", fontsize=20)
+    plt.ylabel("Loss", fontsize=20)
     plt.yscale('log')
     
     ptxt = (f"拟合参数:\nL0={bp[0]:.3f}\nA={bp[1]:.3f}\nC={bp[2]:.3f}\nα={bp[3]:.3f}")
     plt.text(0.97,0.95, ptxt, transform=plt.gca().transAxes,
              va='top', ha='right', bbox=dict(boxstyle='round', fc='white', alpha=0.8))
     
-    plt.legend(ncol=3, loc='lower left', fontsize=10)
+    plt.legend(ncol=3,
+               loc='upper center',
+               bbox_to_anchor=(0.5, 1.0),
+               fontsize=10,
+               frameon=True,
+               borderaxespad=0.5)
+    
     plt.grid(alpha=0.2)
     plt.tight_layout()
     plt.savefig('./figures/momentum_law_fit.png', dpi=300, bbox_inches='tight')
