@@ -153,7 +153,7 @@ if __name__ == "__main__":
 
     os.makedirs('./figures', exist_ok=True)
     
-    plt.title(f"基于{FIT_TYPE}拟合的Scaling law (R²={r2:.4f})", fontsize=14, pad=15)
+    plt.title(f"基于{FIT_TYPE}拟合的Momentum law (R²={r2:.4f})", fontsize=14, pad=15)
     plt.xlabel("Step", fontsize=12)
     plt.ylabel("Loss", fontsize=12)
     plt.yscale('log')
