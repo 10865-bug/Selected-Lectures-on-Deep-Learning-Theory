@@ -133,7 +133,7 @@ def train_model(train_data, rho=0.5, lr1=4e-3, lr2=1e-4, max_steps=1000):
     return final_params, min_loss
 
 def plot_results(dataset, params, fit_type='8-1-1'):
-    fig = plt.figure(figsize=(12,6))
+    fig = plt.figure(figsize=(14,7))
     style_config = {
         '8-1-1': {'c':'#1f77b4','m':'o','l':'8-1-1_LRS'},
         'WSD': {'c':'#ff7f0e','m':'s','l':'WSD_LRS'},
@@ -153,7 +153,7 @@ def plot_results(dataset, params, fit_type='8-1-1'):
         
         plt.plot(target_data['steps'], pred_values, color=style_config[lt]['c'], lw=1.5,
                  ls='--' if lt != fit_type else '-', label=f"{style_config[lt]['l']}预测")
-        plt.scatter(target_data['steps'][::1000], target_data['losses'][::1000], s=10,
+        plt.scatter(target_data['steps'][::500], target_data['losses'][::500], s=15,
                     ec=style_config[lt]['c'], fc='white', marker=style_config[lt]['m'],
                     label=f"{style_config[lt]['l']}实际")
     
