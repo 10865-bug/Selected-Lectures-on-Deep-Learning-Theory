@@ -51,7 +51,7 @@ if __name__ == "__main__":
     FIT_TYPE = 'cosine'
     PREDICT_TYPES = ['8-1-1', 'WSD', 'cosine']
     SAMPLE_RATIO = 1.0
-    DISPLAY_INT = 1000
+    DISPLAY_INT = 500
     
     GRID_CFG = {
         'L0': np.linspace(2.0, 3.0, 5),
@@ -124,7 +124,7 @@ if __name__ == "__main__":
     sst = np.sum((ta - np.mean(ta)) ** 2)
     r2 = 1 - (ssr / sst) if sst != 0 else 0.0
 
-    plt.figure(figsize=(12,6))
+    plt.figure(figsize=(14,7))
     scfg = {
         '8-1-1': {'c':'#1f77b4','m':'o','l':'8-1-1_LRS'},
         'WSD': {'c':'#ff7f0e','m':'s','l':'WSD_LRS'},
@@ -145,10 +145,10 @@ if __name__ == "__main__":
         
         didx = np.arange(0, len(td['steps']), DISPLAY_INT)
         plt.scatter(td['steps'][didx], td['losses'][didx],
-                    s=10, ec=scfg[lt]['c'],
+                    s=15, ec=scfg[lt]['c'],
                     fc='white',
                     marker=scfg[lt]['m'],
-                    lw=1.5,
+                    lw=1,
                     label=f"{scfg[lt]['l']}实际")
 
     os.makedirs('./figures', exist_ok=True)
