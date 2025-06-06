@@ -33,36 +33,40 @@ def compute_s1s2(lr_arr, df=0.999):
         mom[i] = df * mom[i-1] + (lr_arr[i-1] - lr_arr[i])
     return s1_cum, np.cumsum(mom)
 
-def scaling_func(steps, s1_arr, s2_arr, L0, A, C, alpha):
+def scaling_func(steps, s1_arr, s2_arr, L0, A, C, alpha, Sw):
     vs = np.clip(steps, 0, len(s1_arr)-1)
-    return L0 + A * (np.clip(s1_arr[vs], 1e-10, None) ** (-alpha)) - C * s2_arr[vs]
+    return L0 + A * (np.clip(s1_arr[vs] + Sw, 1e-10, None) ** (-alpha)) - C * s2_arr[vs]
 
-def log_mse(p, t):
+def huber_log_loss(p, t, delta=5):
     lp = np.log(np.clip(p, 1e-10, None))
     lt = np.log(np.clip(t, 1e-10, None))
-    return np.mean((lp - lt)**2)
+    e = lt - lp
+    abs_e = np.abs(e)
+    loss = np.where(abs_e <= delta, 0.5 * e**2, delta * (abs_e - 0.5 * delta))
+    return np.mean(loss)
 
 def obj_func(prms, dt):
-    L0, A, C, alpha = prms
-    p = scaling_func(dt['steps'], dt['S1'], dt['S2'], L0, A, C, alpha)
-    return log_mse(p, dt['losses'])
+    L0, A, C, alpha, Sw = prms
+    p = scaling_func(dt['steps'], dt['S1'], dt['S2'], L0, A, C, alpha, Sw)
+    return huber_log_loss(p, dt['losses'])
 
 if __name__ == "__main__":
     FIT_TYPE = 'cosine'
     PREDICT_TYPES = ['8-1-1', 'WSD', 'cosine']
     SAMPLE_RATIO = 1.0
-    DISPLAY_INT = 500
+    PLOT_SKIP = 100
     
     GRID_CFG = {
-        'L0': np.linspace(2.0, 3.0, 5),
-        'A': np.linspace(1.0, 2.0, 5),
-        'C': np.linspace(0.0001, 0.1, 5),
-        'alpha': np.linspace(0.3, 0.7, 5)
+        'L0': np.linspace(2.0, 3.0, 2),
+        'A': np.linspace(1.0, 2.0, 2),
+        'C': np.linspace(0.01, 0.3, 3),
+        'alpha': np.linspace(0.1, 2.0, 3),
+        'Sw': np.linspace(0.1, 0.2, 10)
     }
     
     OPTIM_CFG = {
         'method': 'L-BFGS-B',
-        'bounds': [(0.001, 10.0), (0.0001, 10.0), (0.001, 10.0), (0.001, 10.0)],
+        'bounds': [(0.001, 10.0), (0.0001, 10.0), (0.0001, 10.0), (0.001, 10.0), (0.01, 1.0)],
         'options': {
             'maxiter': 1000,
             'ftol': 1e-6,
@@ -108,67 +112,96 @@ if __name__ == "__main__":
         raise RuntimeError("所有参数组合优化失败！")
 
     print("\r最佳参数组合:")
-    param_names = ['L0', 'A', 'C', 'alpha']
+    param_names = ['L0', 'A', 'C', 'alpha', 'Sw']
     for name, value in zip(param_names, bp):
         print(f"{name:6} = {value:.4f}")
 
-    td = data[FIT_TYPE]
-    lr = td['lrs']
-    s1v, s2v = compute_s1s2(lr)
-    pa = scaling_func(np.arange(len(s1v)), s1v, s2v, *bp)
-    ta = td['losses']
-
-    ta = np.array(ta)
-    pa = np.array(pa)
-    ssr = np.sum((ta - pa) ** 2)
-    sst = np.sum((ta - np.mean(ta)) ** 2)
-    r2 = 1 - (ssr / sst) if sst != 0 else 0.0
-
-    plt.figure(figsize=(14,7))
+    os.makedirs('./figures', exist_ok=True)
     scfg = {
-        '8-1-1': {'c':'#1f77b4','m':'o','l':'8-1-1_LRS'},
-        'WSD': {'c':'#ff7f0e','m':'s','l':'WSD_LRS'},
-        'cosine': {'c':'#2ca02c','m':'D','l':'余弦_LRS'}
+        '8-1-1': {'l':'8-1-1_LRS'},
+        'WSD': {'l':'WSD_LRS'},
+        'cosine': {'l':'余弦_LRS'}
     }
     
+    results = {}
     for lt in PREDICT_TYPES:
         td = data[lt]
         lr = td['lrs']
         s1v, s2v = compute_s1s2(lr)
         pvals = scaling_func(np.arange(len(s1v)), s1v, s2v, *bp)
+        ta = td['losses']
         
-        plt.plot(td['steps'], pvals,
-                 color=scfg[lt]['c'],
-                 lw=1.5,
-                 ls='--' if lt != FIT_TYPE else '-',
-                 label=f"{scfg[lt]['l']}预测")
+        ssr = np.sum((ta - pvals) ** 2)
+        sst = np.sum((ta - np.mean(ta)) ** 2)
+        r2 = 1 - (ssr / sst) if sst != 0 else 0.0
         
-        didx = np.arange(0, len(td['steps']), DISPLAY_INT)
-        plt.scatter(td['steps'][didx], td['losses'][didx],
-                    s=15, ec=scfg[lt]['c'],
-                    fc='white',
-                    marker=scfg[lt]['m'],
-                    lw=1,
-                    label=f"{scfg[lt]['l']}实际")
-
-    os.makedirs('./figures', exist_ok=True)
+        abs_errors = np.abs(pvals - ta)
+        relative_errors = abs_errors / ta
+        mape = np.mean(relative_errors) * 100
+        
+        results[lt] = {'R2': r2, 'MAPE': mape}
+        
+        n = len(ta)
+        group_size = PLOT_SKIP
+        n_groups = n // group_size
+        
+        avg_steps = np.zeros(n_groups)
+        avg_losses = np.zeros(n_groups)
+        avg_pvals = np.zeros(n_groups)
+        
+        for i in range(n_groups):
+            start = i * group_size
+            end = start + group_size
+            avg_steps[i] = td['steps'][start]
+            avg_losses[i] = np.mean(ta[start:end]) if end <= n else 0.0
+            avg_pvals[i] = np.mean(pvals[start:end]) if end <= n else 0.0
+        
+        plt.figure(figsize=(14,7))
+        plt.plot(avg_steps, avg_losses, 'b-', lw=1.5, label='ground truth')
+        plt.plot(avg_steps, avg_pvals, 'r--', lw=1.5, label='prediction')
+        
+        plt.title(f"基于{FIT_TYPE}拟合的Momentum law作用于{lt}", fontsize=14, pad=15)
+        plt.xlabel("Step", fontsize=20)
+        plt.ylabel("Loss", fontsize=20)
+        plt.yscale('log')
+        plt.legend(fontsize=12, loc='best')
+        plt.grid(alpha=0.2)
+        plt.tight_layout()
+        plt.savefig(f'./figures/momentum_law_fit_{lt}.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        
+        last_steps = 25000
+        if len(td['steps']) > last_steps:
+            start_idx = len(td['steps']) - last_steps
+            n = last_steps
+            n_groups = n // group_size
+                
+            last_avg_steps = np.zeros(n_groups)
+            last_avg_losses = np.zeros(n_groups)
+            last_avg_pvals = np.zeros(n_groups)
+                
+            for i in range(n_groups):
+                start = start_idx + i * group_size
+                end = start + group_size
+                last_avg_steps[i] = td['steps'][start]
+                last_avg_losses[i] = np.mean(ta[start:end]) if end <= len(ta) else 0.0
+                last_avg_pvals[i] = np.mean(pvals[start:end]) if end <= len(pvals) else 0.0
+                
+            plt.figure(figsize=(14,7))
+            plt.plot(last_avg_steps, last_avg_losses, 'b-', lw=1.5, label='ground truth')
+            plt.plot(last_avg_steps, last_avg_pvals, 'r--', lw=1.5, label='prediction')
+                
+            plt.title(f"基于{FIT_TYPE}拟合的Momentum law作用于{lt} (最后{last_steps}步)", fontsize=14, pad=15)
+            plt.xlabel("Step", fontsize=20)
+            plt.ylabel("Loss", fontsize=20)
+            plt.yscale('log')
+            plt.legend(fontsize=12, loc='best')
+            plt.grid(alpha=0.2)
+            plt.tight_layout()
+            plt.savefig(f'./figures/our_law_fit_{lt}_last.png', dpi=300, bbox_inches='tight')
+            plt.close()
     
-    plt.title(f"基于{FIT_TYPE}拟合的Momentum law (R²={r2:.4f})", fontsize=14, pad=15)
-    plt.xlabel("Step", fontsize=20)
-    plt.ylabel("Loss", fontsize=20)
-    plt.yscale('log')
-    
-    ptxt = (f"拟合参数:\nL0={bp[0]:.3f}\nA={bp[1]:.3f}\nC={bp[2]:.3f}\nα={bp[3]:.3f}")
-    plt.text(0.97,0.95, ptxt, transform=plt.gca().transAxes,
-             va='top', ha='right', bbox=dict(boxstyle='round', fc='white', alpha=0.8))
-    
-    plt.legend(ncol=3,
-               loc='upper center',
-               bbox_to_anchor=(0.5, 1.0),
-               fontsize=10,
-               frameon=True,
-               borderaxespad=0.5)
-    
-    plt.grid(alpha=0.2)
-    plt.tight_layout()
-    plt.savefig('./figures/momentum_law_fit.png', dpi=300, bbox_inches='tight')
+    print("\n模型评估指标:")
+    for lt in PREDICT_TYPES:
+        print(f"{lt}: R² = {results[lt]['R2']:.4f}, MAPE = {results[lt]['MAPE']:.4f}%")
