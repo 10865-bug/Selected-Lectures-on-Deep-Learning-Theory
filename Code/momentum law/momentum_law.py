@@ -199,7 +199,7 @@ if __name__ == "__main__":
             plt.legend(fontsize=12, loc='best')
             plt.grid(alpha=0.2)
             plt.tight_layout()
-            plt.savefig(f'./figures/our_law_fit_{lt}_last.png', dpi=300, bbox_inches='tight')
+            plt.savefig(f'./figures/momentum_law_fit_{lt}_last.png', dpi=300, bbox_inches='tight')
             plt.close()
     
     print("\n模型评估指标:")
