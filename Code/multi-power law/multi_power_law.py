@@ -32,7 +32,7 @@ def load_data(path):
     }
 
 class PowerLawModel(torch.nn.Module):
-    def __init__(self, L0, A, B, C, alpha, beta, gamma):
+    def __init__(self, L0, A, B, C, alpha, beta, gamma, Sw):
         super().__init__()
         self.log_L0 = torch.nn.Parameter(torch.log(torch.tensor(L0, device=device)))
         self.log_A = torch.nn.Parameter(torch.log(torch.tensor(A, device=device)))
@@ -41,6 +41,7 @@ class PowerLawModel(torch.nn.Module):
         self.log_alpha = torch.nn.Parameter(torch.log(torch.tensor(alpha, device=device)))
         self.log_beta = torch.nn.Parameter(torch.log(torch.tensor(beta, device=device)))
         self.log_gamma = torch.nn.Parameter(torch.log(torch.tensor(gamma, device=device)))
+        self.log_Sw = torch.nn.Parameter(torch.log(torch.tensor(Sw, device=device)))
     
     def forward(self, lrs):
         L0 = torch.exp(self.log_L0)
@@ -50,11 +51,12 @@ class PowerLawModel(torch.nn.Module):
         alpha = torch.exp(self.log_alpha)
         beta = torch.exp(self.log_beta)
         gamma = torch.exp(self.log_gamma)
+        Sw = torch.exp(self.log_Sw)
         
         lrs = torch.clamp(lrs, min=1e-10)
         S1 = torch.cumsum(lrs, dim=0)
         
-        base_term = A * (S1 + 1e-10) ** (-alpha)
+        base_term = A * (S1 + Sw) ** (-alpha)
         
         delta_eta = torch.cat([torch.zeros(1, device=device), lrs[:-1] - lrs[1:]])
         G = 1 - (1 + C * lrs ** (-gamma) * S1) ** (-beta)
@@ -74,14 +76,15 @@ def initialize_params(train_data):
     return {
         'L0': np.linspace(2.0, 3.0, 2),
         'A': np.linspace(1.0, 2.0, 2),
-        'B': np.linspace(1, 20, 2),  
-        'C': np.linspace(0.001, 0.1, 2),
-        'alpha': np.linspace(0.3, 0.8, 2),
-        'beta': np.linspace(0.2, 0.8, 2),  
-        'gamma': np.linspace(0.1, 0.5, 2)  
+        'B': np.linspace(1.0, 500.0, 2),  
+        'C': np.linspace(1.0, 5.0, 2),
+        'alpha': np.linspace(0.5, 1.5, 2),
+        'beta': np.linspace(0.01, 0.1, 2),  
+        'gamma': np.linspace(0.01, 0.3, 2),
+        'Sw': np.linspace(0.1, 0.2, 2)
     }
 
-def train_model(train_data, rho=0.5, lr1=4e-3, lr2=1e-4, max_steps=1000):
+def train_model(train_data, rho=0.5, lr1=1e-3, lr2=1e-4, max_steps=1000):
     param_grid = initialize_params(train_data)
     p_combs = list(product(*param_grid.values()))
     
@@ -92,7 +95,7 @@ def train_model(train_data, rho=0.5, lr1=4e-3, lr2=1e-4, max_steps=1000):
     for idx, params in enumerate(p_combs, 1):
         current_model = PowerLawModel(*params).to(device)
         optimzier = optim.AdamW([
-            {'params': [current_model.log_L0, current_model.log_A, current_model.log_B, current_model.log_C], 'lr': lr1},
+            {'params': [current_model.log_L0, current_model.log_A, current_model.log_B, current_model.log_C, current_model.log_Sw], 'lr': lr1},
             {'params': [current_model.log_alpha, current_model.log_beta, current_model.log_gamma], 'lr': lr2}
         ])
         
@@ -122,7 +125,8 @@ def train_model(train_data, rho=0.5, lr1=4e-3, lr2=1e-4, max_steps=1000):
                         'C': torch.exp(current_model.log_C).item(),
                         'alpha': torch.exp(current_model.log_alpha).item(),
                         'beta': torch.exp(current_model.log_beta).item(),
-                        'gamma': torch.exp(current_model.log_gamma).item()
+                        'gamma': torch.exp(current_model.log_gamma).item(),
+                        'Sw': torch.exp(current_model.log_Sw).item()
                     }
         
         except Exception as e:
@@ -132,74 +136,108 @@ def train_model(train_data, rho=0.5, lr1=4e-3, lr2=1e-4, max_steps=1000):
     print("\r" + " " * 40 + "\r", end='')
     return final_params, min_loss
 
-def plot_results(dataset, params, fit_type='8-1-1'):
-    fig = plt.figure(figsize=(14,7))
-    style_config = {
-        '8-1-1': {'c':'#1f77b4','m':'o','l':'8-1-1_LRS'},
-        'WSD': {'c':'#ff7f0e','m':'s','l':'WSD_LRS'},
-        'cosine': {'c':'#2ca02c','m':'D','l':'余弦_LRS'}
-    }
-    
-    predictor = PowerLawModel(**params).to(device)
-    with torch.no_grad():
-        predictions = predictor(torch.tensor(dataset[fit_type]['lrs'], device=device)).cpu().numpy()
-    actual = dataset[fit_type]['losses']
-    r_squared = 1 - np.sum((actual - predictions)**2) / np.sum((actual - np.mean(actual))**2)
-    
-    for lt in ['8-1-1', 'WSD', 'cosine']:
-        target_data = dataset[lt]
-        with torch.no_grad():
-            pred_values = predictor(torch.tensor(target_data['lrs'], device=device)).cpu().numpy()
-        
-        plt.plot(target_data['steps'], pred_values, color=style_config[lt]['c'], lw=1.5,
-                 ls='--' if lt != fit_type else '-', label=f"{style_config[lt]['l']}预测")
-        plt.scatter(target_data['steps'][::500], target_data['losses'][::500], s=15,
-                    ec=style_config[lt]['c'], fc='white', marker=style_config[lt]['m'],
-                    label=f"{style_config[lt]['l']}实际")
-    
-    os.makedirs('./figures', exist_ok=True)
-    plt.title(f"基于{fit_type}拟合的Multi-power law (R²={r_squared:.4f})", fontsize=14)
-    plt.xlabel("Step", fontsize=20)
-    plt.ylabel("Loss", fontsize=20)
-    plt.yscale('log')
-    
-    param_display = "\n".join([
-        f"L0 = {params['L0']:.4f}",
-        f"A  = {params['A']:.4f}",
-        f"B  = {params['B']:.4f}",
-        f"C  = {params['C']:.4f}",
-        f"α  = {params['alpha']:.4f}",
-        f"β  = {params['beta']:.4f}",
-        f"γ  = {params['gamma']:.4f}"
-    ])
-    plt.text(0.97, 0.95, param_display, transform=fig.gca().transAxes,
-             va='top', ha='right', bbox=dict(facecolor='white', alpha=0.8))
-    
-    plt.legend(ncol=3,
-               loc='upper center',
-               bbox_to_anchor=(0.5, 1.0),
-               fontsize=10,
-               frameon=True,
-               borderaxespad=0.5)
-    plt.grid(alpha=0.2)
-    plt.tight_layout()
-    plt.savefig('./figures/multi_power_law_fit.png', dpi=300, bbox_inches='tight')
-
 if __name__ == "__main__":
     FIT_TYPE = '8-1-1'
+    PLOT_SKIP = 100
+    PREDICT_TYPES = ['8-1-1', 'WSD', 'cosine']
+    
     dataset = load_data('../loss curves/gpt_loss+lrs.pkl')
     
     best_params, best_loss = train_model(dataset[FIT_TYPE], rho=1.0)
     
-    if best_params:
-        print("\n最佳参数:")
-        print(f"L0 = {best_params['L0']:.4f}")
-        print(f"A  = {best_params['A']:.4f}")
-        print(f"B  = {best_params['B']:.4f}") 
-        print(f"C  = {best_params['C']:.4f}")
-        print(f"α  = {best_params['alpha']:.4f}")
-        print(f"β  = {best_params['beta']:.4f}")
-        print(f"γ  = {best_params['gamma']:.4f}")
-        plot_results(dataset, best_params)
-    else:
+    if not best_params:
         print("所有参数组合优化失败！")
+        exit()
+    
+    print("\n最佳参数:")
+    print(f"L0 = {best_params['L0']:.4f}")
+    print(f"A  = {best_params['A']:.4f}")
+    print(f"B  = {best_params['B']:.4f}") 
+    print(f"C  = {best_params['C']:.4f}")
+    print(f"α  = {best_params['alpha']:.4f}")
+    print(f"β  = {best_params['beta']:.4f}")
+    print(f"γ  = {best_params['gamma']:.4f}")
+    print(f"Sw = {best_params['Sw']:.4f}")
+    
+    os.makedirs('./figures', exist_ok=True)
+    model = PowerLawModel(**best_params).to(device)
+    
+    results = {}
+    for lt in PREDICT_TYPES:
+        td = dataset[lt]
+        with torch.no_grad():
+            pvals = model(torch.tensor(td['lrs'], device=device)).cpu().numpy()
+        ta = td['losses']
+        
+        ssr = np.sum((ta - pvals) ** 2)
+        sst = np.sum((ta - np.mean(ta)) ** 2)
+        r2 = 1 - (ssr / sst) if sst != 0 else 0.0
+        
+        abs_errors = np.abs(pvals - ta)
+        relative_errors = abs_errors / ta
+        mape = np.mean(relative_errors) * 100
+        
+        results[lt] = {'R2': r2, 'MAPE': mape}
+        
+        n = len(ta)
+        n_groups = n // PLOT_SKIP
+        
+        avg_steps = np.zeros(n_groups)
+        avg_losses = np.zeros(n_groups)
+        avg_pvals = np.zeros(n_groups)
+        
+        for i in range(n_groups):
+            start = i * PLOT_SKIP
+            end = start + PLOT_SKIP
+            avg_steps[i] = td['steps'][start]
+            avg_losses[i] = np.mean(ta[start:end]) if end <= n else 0.0
+            avg_pvals[i] = np.mean(pvals[start:end]) if end <= n else 0.0
+        
+        plt.figure(figsize=(14,7))
+        plt.plot(avg_steps, avg_losses, 'b-', lw=1.5, label='ground truth')
+        plt.plot(avg_steps, avg_pvals, 'r--', lw=1.5, label='prediction')
+        
+        plt.title(f"基于{FIT_TYPE}拟合的Multi-power law作用于{lt}", fontsize=14, pad=15)
+        plt.xlabel("Step", fontsize=20)
+        plt.ylabel("Loss", fontsize=20)
+        plt.yscale('log')
+        plt.legend(fontsize=12, loc='best')
+        plt.grid(alpha=0.2)
+        plt.tight_layout()
+        plt.savefig(f'./figures/multi_power_law_fit_{lt}.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        last_steps = 25000
+        if len(td['steps']) > last_steps:
+            start_idx = len(td['steps']) - last_steps
+            n = last_steps
+            n_groups = n // PLOT_SKIP
+                
+            last_avg_steps = np.zeros(n_groups)
+            last_avg_losses = np.zeros(n_groups)
+            last_avg_pvals = np.zeros(n_groups)
+                
+            for i in range(n_groups):
+                start = start_idx + i * PLOT_SKIP
+                end = start + PLOT_SKIP
+                last_avg_steps[i] = td['steps'][start]
+                last_avg_losses[i] = np.mean(ta[start:end]) if end <= len(ta) else 0.0
+                last_avg_pvals[i] = np.mean(pvals[start:end]) if end <= len(pvals) else 0.0
+                
+            plt.figure(figsize=(14,7))
+            plt.plot(last_avg_steps, last_avg_losses, 'b-', lw=1.5, label='ground truth')
+            plt.plot(last_avg_steps, last_avg_pvals, 'r--', lw=1.5, label='prediction')
+                
+            plt.title(f"基于{FIT_TYPE}拟合的Multi-power law作用于{lt} (最后{last_steps}步)", fontsize=14, pad=15)
+            plt.xlabel("Step", fontsize=20)
+            plt.ylabel("Loss", fontsize=20)
+            plt.yscale('log')
+            plt.legend(fontsize=12, loc='best')
+            plt.grid(alpha=0.2)
+            plt.tight_layout()
+            plt.savefig(f'./figures/multi_power_law_fit_{lt}_last.png', dpi=300, bbox_inches='tight')
+            plt.close()
+    
+    print("\n模型评估指标:")
+    for lt in PREDICT_TYPES:
+        print(f"{lt}: R² = {results[lt]['R2']:.4f}, MAPE = {results[lt]['MAPE']:.4f}%")
